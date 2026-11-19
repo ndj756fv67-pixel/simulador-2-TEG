@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Simulador TEG 5000 obstétrico</title>
+<style>
+:root{--bg:#f6f7fb;--card:#fff;--tx:#1b1b2f;--mu:#667;--ac:#2a2a8c;--ok:#1a8f4c;--bad:#c62f3f;--ln:#dde;--trace:#1b1b2f;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12121c;--card:#1d1d2c;--tx:#ececf5;--mu:#9a9ab5;--ac:#8d8dff;--ok:#4cd08a;--bad:#ff7a88;--ln:#33334a;--trace:#ececf5}}
+*{box-sizing:border-box}html,body{margin:0}body{background:var(--bg);color:var(--tx);font:15px/1.45 system-ui,-apple-system,sans-serif;max-width:560px;margin:0 auto;padding:12px}
+h1{font-size:18px;margin:4px 0 2px}.sub{color:var(--mu);font-size:12px;margin-bottom:10px}
+.card{background:var(--card);border:1px solid var(--ln);border-radius:12px;padding:12px;margin-bottom:10px}
+.tabs{display:flex;gap:6px;margin-bottom:10px}.tabs button{flex:1}
+button{font:inherit;border:1px solid var(--ln);background:var(--card);color:var(--tx);border-radius:10px;padding:10px;cursor:pointer}
+button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;text-align:center;margin-top:8px}
+.grid div{border:1px solid var(--ln);border-radius:8px;padding:6px 2px}.grid b{display:block;font-size:16px}.grid span{font-size:11px;color:var(--mu)}
+.opts{display:grid;gap:6px}.opts button{text-align:left}.opts button.sel{border-color:var(--ac);outline:2px solid var(--ac)}
+.opts button.right{background:var(--ok);color:#fff;border-color:var(--ok)}.opts button.wrong{background:var(--bad);color:#fff;border-color:var(--bad)}
+.path li{margin:2px 0}.mu{color:var(--mu);font-size:12px}
+label{display:flex;justify-content:space-between;font-size:13px;margin-top:8px}input[type=range]{width:100%}
+svg{width:100%;height:auto;display:block}
+.dx{font-weight:700;color:var(--ac)}
+</style></head><body>
+<h1>Simulador de TEG 5000 · Obstetricia</h1>
+<div class="sub">Herramienta educativa. No sustituye el juicio clínico ni los protocolos institucionales.</div>
+<div class="tabs"><button id="t0" class="on">Guiado</button><button id="t1">Casos</button><button id="t2">Laboratorio</button><button id="t3">Examen</button></div>
+<div id="app"></div>
+<script>
+const DX={normal:"Normal",fibri1:"Fibrinólisis primaria",fibri2:"Fibrinólisis secundaria",factores:"Factores de coagulación disminuidos o no funcionales",plaq:"Función plaquetaria disminuida",bajofib:"Bajo nivel de fibrinógeno",hiperplaq:"Hipercoagulabilidad plaquetaria",hiperenz:"Hipercoagulabilidad enzimática",plaqenz:"Plaquetas e hipercoagulabilidad enzimática"};
+const CI=p=>-0.2454*p.R+0.0184*p.K+0.1655*p.MA-0.0241*p.ang-5.022;
+function algo(p){const ci=CI(p),s=[],f=(t)=>s.push(t);let d;
+ const ly=p.LY>7.5;f("LY30 "+p.LY+"% → "+(ly?"> 7,5 (EPL > 15%)":"≤ 7,5"));
+ if(ly){f("IC "+ci.toFixed(1)+(ci>3?" > 3":" < 3"));d=ci>3?"fibri2":"fibri1"}
+ else if(ci>3){f("IC "+ci.toFixed(1)+" > 3");
+  if(p.R<4){f("R "+p.R+" < 4 mm");f("MA "+p.MA+(p.MA>72?" > 72":" ≤ 72"));d=p.MA>72?"plaqenz":"hiperenz"}
+  else{f("R "+p.R+" ≥ 4 mm");d="hiperplaq"}}
+ else{f("IC "+ci.toFixed(1)+" ≤ 3");
+  if(p.R>10){f("R "+p.R+" > 10 mm");d="factores"}
+  else{f("R "+p.R+" ≤ 10 mm");
+   if(p.MA<54){f("MA "+p.MA+" < 54");d="plaq"}
+   else{f("MA "+p.MA+" ≥ 54");f("Ángulo "+p.ang+(p.ang<47?" < 47":" ≥ 47"));d=p.ang<47?"bajofib":"normal"}}}
+ if(ly&&p.MA<54)s.push("Nota: MA "+p.MA+" < 54 → considere además función plaquetaria disminuida (el algoritmo no evalúa la MA en esta rama).");return{d,s,ci}}
+const CASES=[
+{t:"HPP tras cesárea",h:"G2P2, 34 años, cesárea por sufrimiento fetal. Atonía uterina controlada con uterotónicos; persiste sangrado difuso, 1800 mL.",p:{R:6,K:4.5,ang:42,MA:56,LY:1}},
+{t:"Desprendimiento de placenta",h:"G3, 37 sem, dolor abdominal y útero hipertónico. Sangrado oscuro, sufrimiento fetal. Se realiza cesárea de urgencia. Plaquetas: 55.000/µL.",p:{R:9,K:5,ang:35,MA:45,LY:22}},
+{t:"Acretismo placentario",h:"G3, placenta ácreta, histerectomía obstétrica con lesión tisular extensa y sangrado de 3000 mL. Sangrado difuso en el campo.",p:{R:3.5,K:1.2,ang:70,MA:74,LY:18}},
+{t:"Síndrome HELLP",h:"G1, 33 sem, preeclampsia grave con plaquetas 62.000 y LDH elevada. Cesárea programada.",p:{R:7,K:3.5,ang:50,MA:49,LY:0.5}},
+{t:"Preeclampsia, 3.er trimestre",h:"G1, 38 sem, PA 150/95, sin sangrado. Evaluación preanestésica para cesárea electiva.",p:{R:3.2,K:1,ang:72,MA:75,LY:0.3}},
+{t:"Gestante con anticoagulación",h:"Puérpera con HBPM terapéutica por TEP previo, sangrado posoperatorio por herida quirúrgica.",p:{R:14,K:4,ang:38,MA:58,LY:0}},
+{t:"Cesárea electiva sin complicaciones",h:"G2, 39 sem, sin comorbilidades. TEG de control tras cierre uterino.",p:{R:6,K:2.2,ang:60,MA:62,LY:1}},
+{t:"Puérpera inmovilizada",h:"Día 3 posparto, obesidad, inmovilización. TEG de tamizaje de trombofilia adquirida.",p:{R:5,K:1.5,ang:66,MA:70,LY:1}}];
+const RXO={fib:"Fibrinógeno / crioprecipitado",txa:"Ácido tranexámico",ffp:"Plasma fresco congelado / CCP",plq:"Plaquetas",prot:"Protamina",none:"Sin hemoderivados (observar / tromboprofilaxis)"};
+const NOX="Sin alteración que justifique hemoderivados; transfundir sin indicación añade riesgo. Valore tromboprofilaxis según el riesgo.";
+const RX=[
+{ideal:["fib"],post:{R:6,K:2.5,ang:58,MA:62,LY:1},why:"R normal con ángulo y MA bajos: déficit de fibrinógeno. Reponga fibrinógeno o crioprecipitado según el protocolo institucional."},
+{ideal:["txa","fib","plq"],post:{R:7,K:2.5,ang:58,MA:62,LY:2},why:"MA < 54 con plaquetas de 55.000/µL y sangrado activo: hay además función plaquetaria disminuida. El algoritmo se detiene en la fibrinólisis, pero la MA no debe ignorarse. Fibrinólisis (LY30 alto) con MA baja: antifibrinolítico y reposición de fibrinógeno consumido, además de tratar la causa obstétrica."},
+{ideal:["txa"],post:{R:4.5,K:1.8,ang:66,MA:70,LY:4},why:"Perfil hipercoagulable con lisis (LY30 alto): fibrinólisis secundaria a activación de la coagulación. Con sangrado activo, el ácido tranexámico es razonable; valore el riesgo trombótico y trate la causa (control quirúrgico). Evite hemoderivados sin indicación."},
+{ideal:["plq"],post:{R:6,K:2.8,ang:58,MA:60,LY:0.5},why:"MA baja con R normal: función plaquetaria disminuida. Transfunda plaquetas si hay sangrado o va a cirugía, según umbrales de su protocolo."},
+{ideal:["none"],post:{R:3.2,K:1,ang:72,MA:75,LY:0.3},why:NOX},
+{ideal:["prot"],post:{R:7,K:2.5,ang:58,MA:60,LY:0},why:"R prolongada en paciente con HBPM: efecto heparínico. Considere protamina (parcial en HBPM) y confirme con TEG con heparinasa si lo tiene."},
+{ideal:["none"],post:{R:6,K:2.2,ang:60,MA:62,LY:1},why:NOX},
+{ideal:["none"],post:{R:5,K:1.5,ang:66,MA:70,LY:1},why:NOX}];
+const GP={R:6,K:2.2,ang:60,MA:62,LY:1};
+function gSteps(p){const ci=CI(p).toFixed(1);return[
+{q:'¿El LY30 es > 7,5% (EPL > 15%)?',a:false,h:'El LY30 mide cuánto se lisa el coágulo a los 30 min tras la MA.',w:'LY30 = '+p.LY+'%, menor que 7,5%: no hay fibrinólisis. Se sigue por la rama NO.'},
+{q:'El IC es '+ci+'. ¿Es > 3?',a:false,h:'El IC integra R, K, ángulo y MA; > 3 indica hipercoagulabilidad.',w:'IC '+ci+' no supera 3: no hay hipercoagulabilidad. Rama NO.'},
+{q:'R = '+p.R+' mm. ¿Es > 10 mm?',a:false,h:'R es el tiempo hasta iniciar el coágulo: refleja los factores de coagulación.',w:'R no está prolongada: los factores de coagulación son funcionales. Rama NO.'},
+{q:'MA = '+p.MA+' mm. ¿Es < 54 mm?',a:false,h:'La MA es la firmeza máxima del coágulo: depende sobre todo de plaquetas.',w:'MA normal: la función plaquetaria es adecuada. Rama NO.'},
+{q:'Ángulo = '+p.ang+'°. ¿Es < 47°?',a:false,h:'El ángulo mide la velocidad de formación del coágulo: refleja el fibrinógeno.',w:'Ángulo normal: el fibrinógeno es suficiente. Rama NO.'}]}
+function guided(){const S=gSteps(GP),end=gs>=S.length;
+ let h='<div class="card"><b>Interpretación guiada · TEG normal</b><p class="mu">Gestante de 39 sem, cesárea electiva, sin sangrado. Siga el algoritmo paso a paso.</p>'+trace(GP)+vals(GP)+'</div><div class="card">';
+ if(end)h+='<p><b>✔ Resultado: <span class="dx">'+DX.normal+'</span></b></p><p>Recorrido: LY30 normal → IC ≤ 3 → R ≤ 10 → MA ≥ 54 → ángulo ≥ 47.</p><button id="g2" class="on" style="width:100%">Practicar con casos</button>';
+ else{const s=S[gs];h+='<div class="mu">Paso '+(gs+1)+' de '+S.length+'</div><p><b>'+s.q+'</b></p><div class="opts"><button data-g="1">Sí</button><button data-g="0">No</button></div>';
+  if(gAns=='bad')h+='<p style="color:var(--bad)">✘ Revise el valor e intente de nuevo. '+s.h+'</p>';
+  if(gAns=='ok')h+='<p style="color:var(--ok)">✔ '+s.w+'</p><button id="gn" class="on" style="width:100%">Siguiente paso</button>'}
+ app.innerHTML=h+'</div>';
+ app.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{if(gAns=='ok')return;gAns=(b.dataset.g=='1')==S[gs].a?'ok':'bad';render()});
+ const gn=document.getElementById('gn');if(gn)gn.onclick=()=>{gs++;gAns=null;render()};
+ const g2=document.getElementById('g2');if(g2)g2.onclick=()=>{mode=1;render()}}
+const GC=[
+{t:'TEG normal',h:'Gestante de 39 sem, cesárea electiva, sin sangrado.',p:{R:6,K:2.2,ang:60,MA:62,LY:1}},
+{t:'HPP tras cesárea',h:'G2P2, cesárea por sufrimiento fetal. Atonía controlada con uterotónicos; persiste sangrado difuso de 1800 mL.',p:{R:6,K:4.5,ang:42,MA:56,LY:1}},
+{t:'Acretismo placentario',h:'G3, placenta ácreta, histerectomía obstétrica con lesión tisular extensa y sangrado de 3000 mL.',p:{R:3.5,K:1.2,ang:70,MA:74,LY:18}},
+{t:'Síndrome HELLP',h:'G1, 33 sem, preeclampsia grave con plaquetas de 62.000/µL y LDH elevada. Cesárea programada.',p:{R:7,K:3.5,ang:50,MA:49,LY:0.5}}];
+function gSteps(p){const ci=CI(p),c=ci.toFixed(1),S=[],T=(b,y,n)=>b?y:n,st=(q,a,h,w)=>S.push({q,a,h,w}),ly=p.LY>7.5,hi=ci>3;
+ st('¿El LY30 es > 7,5% (EPL > 15%)?',ly,'El LY30 mide cuánto se lisa el coágulo a los 30 min tras la MA.',T(ly,'LY30 = '+p.LY+'%: hay fibrinólisis. Rama SÍ.','LY30 = '+p.LY+'%, no supera 7,5%: no hay fibrinólisis. Rama NO.'));
+ const hIC='El IC integra R, K, ángulo y MA; > 3 indica hipercoagulabilidad.';
+ if(ly){st('El IC es '+c+'. ¿Es > 3?',hi,hIC,T(hi,'IC > 3: perfil hipercoagulable con lisis, es decir, fibrinólisis secundaria.','IC no supera 3: sin hipercoagulabilidad de base, es decir, fibrinólisis primaria.'))}
+ else{st('El IC es '+c+'. ¿Es > 3?',hi,hIC,T(hi,'IC > 3: hay hipercoagulabilidad. Rama SÍ.','IC no supera 3: no hay hipercoagulabilidad. Rama NO.'));
+  if(hi){const r4=p.R<4;st('R = '+p.R+' mm. ¿Es < 4 mm?',r4,'Un R muy corto indica activación enzimática acelerada.',T(r4,'R < 4: hay componente enzimático.','R ≥ 4: la hipercoagulabilidad es plaquetaria.'));
+   if(r4){const m=p.MA>72;st('MA = '+p.MA+' mm. ¿Es > 72 mm?',m,'La MA es la firmeza máxima del coágulo: plaquetas y fibrinógeno.',T(m,'MA > 72: plaquetas e hipercoagulabilidad enzimática.','MA ≤ 72: hipercoagulabilidad enzimática.'))}}
+  else{const r10=p.R>10;st('R = '+p.R+' mm. ¿Es > 10 mm?',r10,'R es el tiempo hasta iniciar el coágulo: refleja los factores de coagulación.',T(r10,'R prolongada: factores disminuidos o no funcionales.','R no está prolongada: los factores son funcionales. Rama NO.'));
+   if(!r10){const m=p.MA<54;st('MA = '+p.MA+' mm. ¿Es < 54 mm?',m,'La MA es la firmeza máxima del coágulo: depende sobre todo de plaquetas.',T(m,'MA baja: función plaquetaria disminuida.','MA ≥ 54: la función plaquetaria es adecuada. Rama NO.'));
+    if(!m){const a=p.ang<47;st('Ángulo = '+p.ang+'°. ¿Es < 47°?',a,'El ángulo mide la velocidad de formación del coágulo: refleja el fibrinógeno.',T(a,'Ángulo bajo con R y MA conservados: bajo nivel de fibrinógeno.','Ángulo normal: el fibrinógeno es suficiente.'))}}}}
+ return S}
+function guided(){const c=GC[gc],p=c.p,S=gSteps(p),end=gs>=S.length,r=algo(p),bt=`style='width:100%;margin-top:8px'`;
+ let h=`<div class='card'><div class='tabs'>`+GC.map((x,i)=>`<button data-c='${i}' class='${i==gc?'on':''}'>Caso ${i+1}</button>`).join('')+`</div><b>Interpretación guiada · ${c.t}</b><p class='mu'>${c.h} Siga el algoritmo paso a paso.</p>`+trace(p)+vals(p)+`</div><div class='card'>`;
+ if(end)h+=`<p><b>✔ Resultado: <span class='dx'>${DX[r.d]}</span></b></p>`+pathHTML(r)+(gc<GC.length-1?`<button id='g3' class='on' ${bt}>Siguiente caso guiado</button>`:'')+`<button id='g2' ${bt}>Practicar con casos</button>`;
+ else{const s=S[gs];h+=`<div class='mu'>Paso ${gs+1} de ${S.length}</div><p><b>${s.q}</b></p><div class='opts'><button data-g='1'>Sí</button><button data-g='0'>No</button></div>`;
+  if(gAns=='bad')h+=`<p style='color:var(--bad)'>✘ Revise el valor e intente de nuevo. ${s.h}</p>`;
+  if(gAns=='ok')h+=`<p style='color:var(--ok)'>✔ ${s.w}</p><button id='gn' class='on' ${bt}>Siguiente paso</button>`}
+ app.innerHTML=h+'</div>';
+ app.querySelectorAll('[data-c]').forEach(b=>b.onclick=()=>{gc=+b.dataset.c;gs=0;gAns=null;render()});
+ app.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{if(gAns=='ok')return;gAns=(b.dataset.g=='1')==S[gs].a?'ok':'bad';render()});
+ const gn=document.getElementById('gn');if(gn)gn.onclick=()=>{gs++;gAns=null;render()};
+ const g3=document.getElementById('g3');if(g3)g3.onclick=()=>{gc++;gs=0;gAns=null;render()};
+ const g2=document.getElementById('g2');if(g2)g2.onclick=()=>{mode=1;render()}}
+let ex=null,exT=null;
+const fmt=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+function exStart(){ex={o:CASES.map((_,i)=>i).sort(()=>Math.random()-.5),i:0,a:[],d:null,r:[],t0:Date.now(),t1:0};clearInterval(exT);exT=setInterval(()=>{const e=document.getElementById('tm');if(e&&ex&&!ex.t1)e.textContent=fmt((Date.now()-ex.t0)/1000)},1000)}
+function exam(){
+ if(!ex){app.innerHTML=`<div class='card'><b>Modo examen</b><p>8 casos en orden aleatorio. En cada uno interprete el TEG y elija la conducta. No hay pistas ni retroalimentación hasta el final, y se cronometra el tiempo total.</p><button id='es' class='on' style='width:100%'>Comenzar examen</button></div>`;document.getElementById('es').onclick=()=>{exStart();render()};return}
+ const N=ex.o.length;
+ if(ex.i>=N){let sd=0,sr=0,rows='';
+  ex.a.forEach(a=>{const c=CASES[a.ci],x=RX[a.ci],cd=algo(c.p).d,od=a.d==cd,or=a.r.slice().sort().join()==x.ideal.slice().sort().join();if(od)sd++;if(or)sr++;
+   rows+=`<div class='card'><b>${c.t}</b><p>${od?'✔':'✘'} Diagnóstico: ${DX[a.d]}${od?'':' → correcto: <b>'+DX[cd]+'</b>'}</p><p>${or?'✔':'✘'} Conducta: ${a.r.map(k=>RXO[k]).join(', ')}${or?'':' → referencia: <b>'+x.ideal.map(k=>RXO[k]).join(', ')+'</b>'}</p><p class='mu'>${x.why}</p></div>`});
+  const pct=Math.round(100*(sd+sr)/(2*N));
+  app.innerHTML=`<div class='card'><b>Resultado del examen</b><p style='font-size:28px;margin:6px 0'><b>${pct}%</b></p><p>Diagnóstico: ${sd}/${N} · Conducta: ${sr}/${N}<br>Tiempo total: ${fmt((ex.t1-ex.t0)/1000)}</p><button id='er' class='on' style='width:100%'>Repetir examen</button></div>`+rows;
+  document.getElementById('er').onclick=()=>{ex=null;render()};return}
+ const ci=ex.o[ex.i],c=CASES[ci],last=ex.i==N-1;
+ app.innerHTML=`<div class='card'><div class='mu'>Pregunta ${ex.i+1} de ${N} · <span id='tm'>${fmt((Date.now()-ex.t0)/1000)}</span></div><p>${c.h}</p>${trace(c.p)}${vals(c.p)}</div><div class='card'><b>1. Interpretación</b><div class='opts' style='margin-top:8px'>`+Object.entries(DX).map(([k,v])=>`<button data-d='${k}' class='${ex.d==k?'sel':''}'>${v}</button>`).join('')+`</div><hr style='border:0;border-top:1px solid var(--ln);margin:12px 0'><b>2. Conducta</b><div class='opts' style='margin-top:8px'>`+Object.entries(RXO).map(([k,v])=>`<button data-x='${k}' class='${ex.r.includes(k)?'sel':''}'>${v}</button>`).join('')+`</div><button id='enx' class='on' style='width:100%;margin-top:10px' ${ex.d&&ex.r.length?'':'disabled'}>${last?'Finalizar examen':'Siguiente'}</button></div>`;
+ app.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{ex.d=b.dataset.d;render()});
+ app.querySelectorAll('[data-x]').forEach(b=>b.onclick=()=>{const k=b.dataset.x;ex.r=k=='none'?(ex.r.includes('none')?[]:['none']):(ex.r.includes(k)?ex.r.filter(z=>z!=k):[...ex.r.filter(z=>z!='none'),k]);render()});
+ document.getElementById('enx').onclick=()=>{ex.a.push({ci,d:ex.d,r:ex.r.slice()});ex.d=null;ex.r=[];ex.i++;if(ex.i>=N){ex.t1=Date.now();clearInterval(exT)}render()}}
+function rxHTML(c){const x=RX[idx],hr='<hr style="border:0;border-top:1px solid var(--ln);margin:12px 0">';
+ let h=hr+'<b>Decisión terapéutica</b><div class="opts" style="margin-top:8px">'+Object.entries(RXO).map(([k,v])=>{const on=rx.includes(k),cl=rxDone?(x.ideal.includes(k)?"right":on?"wrong":""):(on?"sel":"");return `<button data-r="${k}" class="${cl}">${v}</button>`}).join("")+'</div>';
+ if(!rxDone)return h+`<button id="rok" class="on" style="width:100%;margin-top:8px" ${rx.length?"":"disabled"}>Aplicar tratamiento</button>`;
+ const g=rx.slice().sort().join()==x.ideal.slice().sort().join(),q=g?x.post:c.p;
+ return h+`<p><b>${g?"✔ Conducta adecuada":"✘ Conducta mejorable (en verde, la de referencia)"}</b></p><p>${x.why}</p><div class="mu">TEG de control ${g?"tras el tratamiento":"(sin cambios relevantes: no se corrigió la causa)"}</div>${trace(q)}${vals(q)}<button id="nx" class="on" style="width:100%;margin-top:8px">Siguiente caso</button><p class="mu">Educativo: dosis y umbrales según su protocolo institucional.</p>`}
+function trace(p){const W=340,H=150,c=75,R=p.R,tau=Math.max(p.K,.5)/1.6,tM=R+4*tau,T=tM+30,sx=W/(T*1.05),A=p.MA/2*1.05,k=1-Math.exp(-4);
+ const a=t=>t<R?.4:t<tM?.4+(A-.4)*(1-Math.exp(-(t-R)/tau))/k:A*(1-p.LY/100*(t-tM)/30);
+ let u="",l="";for(let i=0;i<=200;i++){const t=T*i/200,x=(t*sx).toFixed(1),y=a(t);u+=(i?"L":"M")+x+" "+(c-y).toFixed(1);l+=(i?"L":"M")+x+" "+(c+y).toFixed(1)}
+ return `<svg viewBox="0 0 ${W} ${H}"><line x1="0" x2="${W}" y1="${c}" y2="${c}" stroke="var(--ln)" stroke-dasharray="3"/><path d="${u}" fill="none" stroke="var(--trace)" stroke-width="2"/><path d="${l}" fill="none" stroke="var(--trace)" stroke-width="2"/><line x1="${tM*sx}" x2="${tM*sx}" y1="${c-A}" y2="${c+A}" stroke="var(--ac)" stroke-dasharray="3"/><text x="4" y="12" font-size="10" fill="var(--mu)">MA ${p.MA} mm</text><text x="${W-4}" y="${H-4}" text-anchor="end" font-size="10" fill="var(--mu)">tiempo (min)</text></svg>`}
+const vals=p=>`<div class="grid"><div><b>${p.R}</b><span>R (mm)</span></div><div><b>${p.K}</b><span>K (mm)</span></div><div><b>${p.ang}°</b><span>Ángulo</span></div><div><b>${p.MA}</b><span>MA (mm)</span></div><div><b>${p.LY}%</b><span>LY30</span></div><div><b>${CI(p).toFixed(1)}</b><span>IC</span></div></div>`;
+const app=document.getElementById("app");let gc=0,gs=0,gAns=null,rx=[],rxDone=false,score2=0,n2=0,mode=0,idx=0,sel=null,done=false,score=0,n=0,free={R:6,K:2.2,ang:60,MA:62,LY:1};
+function pathHTML(r){return `<ol class="path">${r.s.map(x=>"<li>"+x+"</li>").join("")}</ol>`}
+function render(){document.getElementById('t0').className=mode==0?'on':'';document.getElementById('t1').className=mode==1?'on':'';document.getElementById('t2').className=mode==2?'on':'';
+ document.getElementById('t3').className=mode==3?'on':'';if(mode==3)return exam();
+ if(mode==0)return guided();
+ document.getElementById("t1").className=mode==1?"on":"";document.getElementById("t2").className=mode==2?"on":"";
+ if(mode==1){const c=CASES[idx],r=algo(c.p);
+  app.innerHTML=`<div class="tabs" style="overflow-x:auto">${CASES.map((x,i)=>`<button data-i="${i}" class="${i==idx?"on":""}" style="flex:none;white-space:nowrap">${["HPP","Desprendimiento","Acretismo","HELLP","Preeclampsia","Anticoagulada","Cesárea normal","Puérpera"][i]||"Caso "+(i+1)}</button>`).join("")}</div><div class="card"><b>${c.t}</b><p>${c.h}</p>${trace(c.p)}${vals(c.p)}</div>
+  <div class="card"><b>¿Cuál es su interpretación?</b><div class="opts" style="margin-top:8px">${Object.entries(DX).map(([k,v])=>`<button data-k="${k}" class="${done?(k==r.d?"right":k==sel?"wrong":""):(k==sel?"sel":"")}">${v}</button>`).join("")}</div>
+  ${done?`<p><b>${sel==r.d?"✔ Correcto":"✘ Incorrecto"}</b> · Resultado del algoritmo: <span class="dx">${DX[r.d]}</span></p>${pathHTML(r)}${rxHTML(c)}`:`<button id="ok" class="on" style="width:100%;margin-top:8px" ${sel?"":"disabled"}>Confirmar</button>`}
+  <p class="mu">Diagnóstico: ${score}/${n} · Conducta: ${score2}/${n2}</p></div>`;
+  app.querySelectorAll("[data-r]").forEach(b=>b.onclick=()=>{if(rxDone)return;const k=b.dataset.r;rx=k=="none"?(rx.includes("none")?[]:["none"]):(rx.includes(k)?rx.filter(z=>z!=k):[...rx.filter(z=>z!="none"),k]);render()});
+  app.querySelectorAll('[data-i]').forEach(b=>b.onclick=()=>{idx=+b.dataset.i;sel=null;done=false;rx=[];rxDone=false;render()});
+  const rok=document.getElementById("rok");if(rok)rok.onclick=()=>{rxDone=true;n2++;if(rx.slice().sort().join()==RX[idx].ideal.slice().sort().join())score2++;render()};
+  app.querySelectorAll("[data-k]").forEach(b=>b.onclick=()=>{if(!done){sel=b.dataset.k;render()}});
+  const ok=document.getElementById("ok");if(ok)ok.onclick=()=>{done=true;n++;if(sel==r.d)score++;render()};
+  const nx=document.getElementById("nx");if(nx)nx.onclick=()=>{idx=(idx+1)%CASES.length;sel=null;done=false;rx=[];rxDone=false;render()};
+ }else{const r=algo(free);
+  const S=(k,l,mi,ma,st)=>`<label><span>${l}</span><b id="v${k}">${free[k]}</b></label><input type="range" data-s="${k}" min="${mi}" max="${ma}" step="${st}" value="${free[k]}">`;
+  app.innerHTML=`<div class="card"><div id="tr">${trace(free)}</div><div id="vl">${vals(free)}</div></div><div class="card">${S("R","R (mm)",1,20,.1)}${S("K","K (mm)",.5,10,.1)}${S("ang","Ángulo (°)",15,80,1)}${S("MA","MA (mm)",30,85,1)}${S("LY","LY30 (%)",0,40,.1)}</div><div class="card"><div class="mu">Resultado del algoritmo</div><div class="dx" id="dx">${DX[r.d]}</div><div id="ph">${pathHTML(r)}</div></div>`;
+  app.querySelectorAll("[data-s]").forEach(i=>i.oninput=()=>{free[i.dataset.s]=+i.value;document.getElementById("v"+i.dataset.s).textContent=i.value;const r=algo(free);
+   document.getElementById("tr").innerHTML=trace(free);document.getElementById("vl").innerHTML=vals(free);document.getElementById("dx").textContent=DX[r.d];document.getElementById("ph").innerHTML=pathHTML(r)})}}
+document.getElementById('t0').onclick=()=>{mode=0;gs=0;gAns=null;render()};document.getElementById('t3').onclick=()=>{mode=3;render()};document.getElementById("t1").onclick=()=>{mode=1;render()};document.getElementById("t2").onclick=()=>{mode=2;render()};render();
+</script></body></html>
